@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The RAG Field Manual — from a user's question to a grounded answer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400&family=Spline+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#FAF6EC; --paper-2:#F1EADB; --paper-3:#E8DFCC;
+    --ink:#1B1A15; --ink-2:#494640; --ink-3:#827E72;
+    --rule:rgba(27,26,21,0.13); --rule-strong:rgba(27,26,21,0.28);
+    --teal:#0E6B54; --teal-deep:#0A4D3D; --teal-soft:#E0F2EB;
+    --coral:#BC4A26; --coral-soft:#F8E7DD;
+    --amber:#A86C0A; --amber-soft:#FBEFD6;
+    --blue:#1C5C90; --blue-soft:#E2EDF6;
+    --code-bg:#16150F; --code-ink:#EDE7D6; --code-dim:#9A968A;
+    --display:'Fraunces',Georgia,serif; --body:'Spline Sans',system-ui,sans-serif; --mono:'JetBrains Mono',monospace;
+    --maxw:760px;
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    margin:0; background:var(--paper); color:var(--ink);
+    font-family:var(--body); font-size:17px; line-height:1.72; font-weight:400;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:var(--maxw); margin:0 auto; padding:0 24px;}
+  .bleed{max-width:1040px; margin:0 auto; padding:0 24px;}
+
+  h1,h2,h3,h4{font-family:var(--display); font-weight:500; line-height:1.12; letter-spacing:-0.01em; color:var(--ink);}
+  h2{font-size:34px; margin:0 0 6px;}
+  h3{font-size:23px; margin:2.4rem 0 0.5rem;}
+  h4{font-size:18px; font-family:var(--body); font-weight:600; margin:1.6rem 0 0.3rem; letter-spacing:0;}
+  p{margin:0 0 1.1rem;}
+  a{color:var(--teal-deep); text-decoration:underline; text-underline-offset:2px; text-decoration-thickness:1px;}
+  strong{font-weight:600;}
+  em{font-style:italic;}
+  code{font-family:var(--mono); font-size:0.86em; background:var(--paper-2); padding:1px 5px; border-radius:4px; color:var(--ink); border:0.5px solid var(--rule);}
+
+  /* ===== Hero ===== */
+  header.hero{
+    position:relative; border-bottom:1px solid var(--rule-strong);
+    background:
+      linear-gradient(transparent 0 calc(100% - 1px), var(--rule) calc(100% - 1px)) 0 0 / 100% 28px,
+      linear-gradient(90deg, transparent 0 calc(100% - 1px), var(--rule) calc(100% - 1px)) 0 0 / 28px 100%,
+      var(--paper-2);
+    background-blend-mode:normal; overflow:hidden;
+  }
+  header.hero .bleed{padding-top:72px; padding-bottom:60px; position:relative;}
+  .eyebrow{font-family:var(--mono); font-size:12.5px; letter-spacing:0.22em; text-transform:uppercase; color:var(--coral); margin:0 0 18px;}
+  header.hero h1{font-size:clamp(40px,7vw,68px); line-height:1.0; letter-spacing:-0.025em; margin:0 0 22px; max-width:14ch;}
+  header.hero h1 .it{font-style:italic; font-weight:400;}
+  .lede{font-size:20px; line-height:1.6; color:var(--ink-2); max-width:54ch; margin:0 0 28px;}
+  .meta-row{display:flex; flex-wrap:wrap; gap:10px 26px; font-family:var(--mono); font-size:12.5px; color:var(--ink-3); letter-spacing:0.04em; padding-top:18px; border-top:1px solid var(--rule);}
+  .meta-row b{color:var(--ink); font-weight:500;}
+
+  .reveal{opacity:0; transform:translateY(14px); transition:opacity .7s ease, transform .7s ease;}
+  .reveal.in{opacity:1; transform:none;}
+
+  /* ===== Section scaffolding ===== */
+  section{padding:64px 0; border-bottom:1px solid var(--rule);}
+  .sec-no{font-family:var(--mono); font-size:13px; color:var(--coral); letter-spacing:0.18em; text-transform:uppercase; display:block; margin-bottom:10px;}
+  .sec-lead{font-size:19px; color:var(--ink-2); max-width:58ch;}
+
+  /* ===== Callouts ===== */
+  .note{border-left:3px solid var(--teal); background:var(--teal-soft); padding:14px 18px; border-radius:0 8px 8px 0; margin:1.4rem 0; font-size:15.5px;}
+  .note.warn{border-left-color:var(--coral); background:var(--coral-soft);}
+  .note.amber{border-left-color:var(--amber); background:var(--amber-soft);}
+  .note .lbl{font-family:var(--mono); font-size:11px; letter-spacing:0.14em; text-transform:uppercase; display:block; margin-bottom:4px; color:var(--teal-deep);}
+  .note.warn .lbl{color:var(--coral);}
+  .note.amber .lbl{color:var(--amber);}
+
+  /* ===== Code ===== */
+  pre{background:var(--code-bg); color:var(--code-ink); border-radius:10px; padding:18px 20px; overflow-x:auto; font-family:var(--mono); font-size:13.5px; line-height:1.6; margin:1.2rem 0; border:1px solid #2a281f;}
+  pre .cm{color:var(--code-dim);}
+  pre .kw{color:#7Fd4b0;}
+  pre .st{color:#E6C07a;}
+  pre .ty{color:#7FB6E6;}
+  .codecap{font-family:var(--mono); font-size:11.5px; letter-spacing:0.08em; text-transform:uppercase; color:var(--ink-3); margin:1.2rem 0 -0.4rem;}
+
+  /* ===== Data-shape pill ===== */
+  .shape{display:flex; align-items:center; gap:10px; flex-wrap:wrap; font-family:var(--mono); font-size:13px; margin:1rem 0; padding:12px 14px; background:var(--paper-2); border:0.5px solid var(--rule); border-radius:8px;}
+  .shape .arrow{color:var(--coral); font-weight:500;}
+  .shape b{color:var(--teal-deep); font-weight:500;}
+
+  /* ===== Tables ===== */
+  .tbl-scroll{overflow-x:auto; margin:1.3rem 0; border:1px solid var(--rule); border-radius:10px;}
+  table{border-collapse:collapse; width:100%; font-size:14px;}
+  th,td{text-align:left; padding:11px 14px; border-bottom:0.5px solid var(--rule); vertical-align:top;}
+  th{font-family:var(--mono); font-size:11.5px; letter-spacing:0.08em; text-transform:uppercase; color:var(--ink-3); background:var(--paper-2); font-weight:400;}
+  tr:last-child td{border-bottom:none;}
+  td b{font-weight:600;}
+  td.tool{font-family:var(--mono); font-size:13px; color:var(--teal-deep);}
+
+  /* ===== Interactive shell ===== */
+  .lab{background:var(--paper-2); border:1px solid var(--rule-strong); border-radius:14px; padding:22px; margin:1.8rem 0;}
+  .lab-head{display:flex; align-items:baseline; justify-content:space-between; gap:12px; margin-bottom:4px;}
+  .lab-tag{font-family:var(--mono); font-size:11px; letter-spacing:0.16em; text-transform:uppercase; color:var(--coral);}
+  .lab-title{font-family:var(--display); font-size:20px; font-weight:500;}
+  .lab-sub{font-size:14.5px; color:var(--ink-2); margin:0 0 16px;}
+  .ctrl{display:flex; align-items:center; gap:12px; margin:10px 0;}
+  .ctrl label{font-size:13.5px; color:var(--ink-2); min-width:120px;}
+  input[type=range]{flex:1; accent-color:var(--teal); height:4px;}
+  .ctrl .val{font-family:var(--mono); font-size:14px; font-weight:500; min-width:46px; text-align:right;}
+  button.btn{font-family:var(--body); font-size:14px; font-weight:500; background:var(--ink); color:var(--paper); border:none; padding:9px 16px; border-radius:8px; cursor:pointer; transition:transform .12s, background .2s;}
+  button.btn:hover{background:var(--teal-deep);}
+  button.btn:active{transform:scale(0.97);}
+  button.btn.ghost{background:transparent; color:var(--ink); border:1px solid var(--rule-strong);}
+  button.btn.ghost:hover{background:var(--paper-3); color:var(--ink);}
+  button.btn:disabled{opacity:0.4; cursor:not-allowed; transform:none;}
+
+  .metric-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(110px,1fr)); gap:10px; margin:14px 0;}
+  .metric{background:var(--paper); border:0.5px solid var(--rule); border-radius:8px; padding:11px 13px;}
+  .metric .k{font-size:12px; color:var(--ink-3);}
+  .metric .v{font-family:var(--display); font-size:26px; font-weight:500; line-height:1.1;}
+  .metric .h{font-size:11px; color:var(--ink-3);}
+
+  textarea{width:100%; font-family:var(--mono); font-size:13px; line-height:1.55; border:0.5px solid var(--rule-strong); border-radius:8px; padding:12px; background:var(--paper); color:var(--ink); resize:vertical;}
+
+  /* flow stepper */
+  .flow-stages{display:flex; flex-wrap:wrap; gap:7px; margin-bottom:8px;}
+  .stage-chip{font-family:var(--mono); font-size:11.5px; padding:6px 10px; border-radius:7px; border:0.5px solid var(--rule); background:var(--paper); color:var(--ink-3); cursor:pointer; transition:all .2s; white-space:nowrap;}
+  .stage-chip.on{background:var(--teal); color:#fff; border-color:var(--teal);}
+  .stage-chip.done{color:var(--ink); border-color:var(--rule-strong);}
+  .phase-band{font-family:var(--mono); font-size:10.5px; letter-spacing:0.14em; text-transform:uppercase; color:var(--coral); margin:10px 0 4px;}
+  .inspector{background:var(--paper); border:0.5px solid var(--rule-strong); border-radius:10px; padding:16px; margin-top:12px; min-height:150px;}
+  .insp-title{font-family:var(--display); font-size:18px; font-weight:500; margin-bottom:2px;}
+  .insp-blurb{font-size:14px; color:var(--ink-2); margin-bottom:10px;}
+  .insp-data{font-family:var(--mono); font-size:12.5px; line-height:1.6; background:var(--code-bg); color:var(--code-ink); border-radius:8px; padding:12px 14px; overflow-x:auto;}
+  .insp-data .dim{color:var(--code-dim);}
+  .insp-data .hi{color:#7Fd4b0;}
+  .insp-data .hi2{color:#E6C07a;}
+
+  /* chunk render */
+  .chunk{display:inline; padding:1px 2px; border-radius:3px; line-height:2.1;}
+  .chunk-list .cw{font-family:var(--mono); font-size:12.5px; line-height:1.5; padding:8px 10px; border-radius:6px; margin-bottom:6px; border:0.5px solid var(--rule);}
+  .cw .cw-h{font-size:10.5px; letter-spacing:0.1em; text-transform:uppercase; color:var(--ink-3); display:block; margin-bottom:3px;}
+  .ov{background:var(--amber-soft); color:var(--amber); border-radius:3px; padding:0 2px;}
+
+  /* sim bars */
+  .simrow{display:grid; grid-template-columns:1fr 90px; gap:10px; align-items:center; margin:7px 0; font-size:13.5px;}
+  .simrow .txt{font-family:var(--mono); font-size:12px;}
+  .bar{height:22px; border-radius:5px; background:var(--paper-3); position:relative; overflow:hidden;}
+  .bar .fill{position:absolute; left:0; top:0; bottom:0; background:var(--teal); border-radius:5px; transition:width .5s;}
+  .bar.win .fill{background:var(--teal);}
+  .bar.lo .fill{background:var(--ink-3);}
+  .simrow .sc{font-family:var(--mono); font-size:13px; text-align:right;}
+
+  /* TOC */
+  nav.toc{position:sticky; top:0; z-index:20; background:rgba(250,246,236,0.92); backdrop-filter:blur(8px); border-bottom:1px solid var(--rule);}
+  nav.toc .bleed{display:flex; gap:4px 18px; flex-wrap:wrap; padding-top:12px; padding-bottom:12px; font-family:var(--mono); font-size:12px;}
+  nav.toc a{color:var(--ink-2); text-decoration:none; letter-spacing:0.02em;}
+  nav.toc a:hover{color:var(--teal-deep);}
+  nav.toc .brand{color:var(--coral); font-weight:500; margin-right:6px;}
+
+  ul.clean{margin:0 0 1.1rem; padding-left:1.2rem;}
+  ul.clean li{margin-bottom:0.5rem;}
+  .pill{display:inline-block; font-family:var(--mono); font-size:11px; padding:2px 8px; border-radius:20px; background:var(--blue-soft); color:var(--blue); margin-right:5px;}
+
+  footer{padding:50px 0 80px; color:var(--ink-3); font-size:14px;}
+  footer .bleed > div{max-width:var(--maxw); margin:0 auto;}
+  .src{font-size:13px; line-height:1.5;}
+  .src a{color:var(--ink-2);}
+
+  @media (max-width:640px){
+    body{font-size:16px;}
+    h2{font-size:27px;}
+    .ctrl label{min-width:90px;}
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="bleed">
+    <p class="eyebrow reveal">Engineering field manual · retrieval-augmented generation</p>
+    <h1 class="reveal">How a <span class="it">question</span> becomes a grounded <span class="it">answer</span></h1>
+    <p class="lede reveal">A from-zero walk through every stage of a RAG system — ingestion, chunking, embeddings, the vector index, retrieval, reranking, generation, the agent layer, and evaluation — with working playgrounds, C# you can lift, and the open-source alternative for every tool. Read it once, own it for good.</p>
+    <div class="meta-row reveal">
+      <span><b>9</b> stages</span>
+      <span><b>5</b> playgrounds</span>
+      <span><b>C#</b> examples</span>
+      <span>running example: <b>a specialty-pharmacy assistant</b></span>
+    </div>
+  </div>
+</header>
+
+<nav class="toc">
+  <div class="bleed">
+    <span class="brand">RAG ▸</span>
+    <a href="#bigpicture">Big picture</a>
+    <a href="#ingest">1 Ingest</a>
+    <a href="#chunk">2 Chunk</a>
+    <a href="#embed">3 Embed</a>
+    <a href="#index">4 Index</a>
+    <a href="#retrieve">5 Retrieve</a>
+    <a href="#augment">6 Augment</a>
+    <a href="#generate">7 Generate</a>
+    <a href="#agents">8 Agents</a>
+    <a href="#eval">9 Evaluate</a>
+    <a href="#tools">Tools</a>
+    <a href="#cheat">Cheat sheet</a>
+  </div>
+</nav>
+
+<section id="bigpicture">
+  <div class="wrap">
+    <span class="sec-no">The big picture</span>
+    <h2>Two pipelines wearing one name</h2>
+    <p class="sec-lead">The single most useful thing to understand before any detail: RAG is not one flow, it is two. They run at different times and most confusion comes from blurring them.</p>
+
+    <h4>Pipeline A — Indexing (offline, runs ahead of time)</h4>
+    <p>You take your documents and prepare them for fast search: load and extract the raw text, split it into chunks, turn each chunk into a vector with an embedding model, and store those vectors in an index. This happens once (and again whenever documents change). It touches no user and no question.</p>
+
+    <h4>Pipeline B — Querying (online, runs per question)</h4>
+    <p>A user asks something. You embed their question with the <em>same</em> model, search the index for the nearest chunks, optionally rerank them, paste the best ones into a prompt as context, and let the language model write a grounded answer. This is the part the user feels, and it must be fast.</p>
+
+    <div class="note">
+      <span class="lbl">The mental model that makes it stick</span>
+      Indexing is writing the index at the back of a textbook. Querying is using that index to flip straight to the right pages, then writing an answer in your own words from only those pages. The embedding model is the thing that decides which entries are "about the same topic" — and you must use the identical model on both sides, or the index and the question speak different languages.
+    </div>
+
+    <p>The playground below carries one real question — <em>"Does Humira need prior authorization?"</em> — through the whole journey. Step through it and watch the <strong>shape of the data change</strong> at every hop: text becomes vectors, vectors become ranked chunks, chunks become a prompt, the prompt becomes an answer.</p>
+
+    <div class="lab" id="flowlab">
+      <div class="lab-head">
+        <span class="lab-title">Playground · the data's journey</span>
+        <span class="lab-tag">interactive</span>
+      </div>
+      <p class="lab-sub">Click a stage, or use Step / Play. The inspector shows the actual data living between stages.</p>
+      <div class="phase-band">Pipeline A — indexing (offline)</div>
+      <div class="flow-stages" id="flowA"></div>
+      <div class="phase-band">Pipeline B — querying (per question)</div>
+      <div class="flow-stages" id="flowB"></div>
+      <div class="ctrl" style="margin-top:14px;">
+        <button class="btn ghost" id="flowPrev">‹ Back</button>
+        <button class="btn" id="flowNext">Step ›</button>
+        <button class="btn ghost" id="flowPlay">▶ Play</button>
+        <button class="btn ghost" id="flowReset">Reset</button>
+      </div>
+      <div class="inspector" id="flowInsp"></div>
+    </div>
+  </div>
+</section>
+
+
+<section id="ingest">
+  <div class="wrap">
+    <span class="sec-no">Stage 1 · indexing</span>
+    <h2>Ingestion &amp; extraction</h2>
+    <p class="sec-lead">Before anything intelligent happens, you need clean text. Real documents are PDFs, Word files, HTML, scans, slides — messy containers. Extraction pulls readable text (and ideally structure: headings, tables, lists) out of them.</p>
+
+    <div class="shape"><b>raw file</b> <span class="arrow">→</span> extract <span class="arrow">→</span> <b>plain text / markdown</b></div>
+
+    <p>Quality here sets the ceiling for everything downstream. Garbled tables, missing headers, or columns merged into nonsense will silently poison retrieval no matter how good your later stages are. Structure-aware extraction (keeping a heading attached to its paragraph) pays off later because it gives chunking natural seams to cut along.</p>
+
+    <p class="codecap">C# — extract before you chunk</p>
+<pre><span class="cm">// In the running example, a service wraps the extractor.</span>
+<span class="cm">// It turns a PDF into markdown text the rest of the pipeline can read.</span>
+<span class="kw">var</span> extractor = <span class="kw">new</span> <span class="ty">DocumentExtractor</span>(config);
+<span class="kw">string</span> text = <span class="kw">await</span> extractor.ExtractAsync(<span class="st">"Policies.pdf"</span>);
+<span class="cm">// text now holds the document as clean, chunk-ready markdown</span></pre>
+
+    <h4>Tools &amp; open-source alternatives</h4>
+    <ul class="clean">
+      <li><strong>Used here:</strong> Azure Content Understanding (managed PDF/scan → markdown, handles tables and layout).</li>
+      <li><strong>Open source:</strong> <span class="pill">Docling</span><span class="pill">Unstructured</span><span class="pill">Apache Tika</span><span class="pill">PyMuPDF</span><span class="pill">pdfplumber</span> — Docling and Unstructured are the strongest for layout-aware extraction; PyMuPDF is fast and simple for clean text.</li>
+    </ul>
+    <div class="note amber"><span class="lbl">Common trap</span>Scanned PDFs are images, not text. They need OCR (e.g. Tesseract, or a vision model) <em>before</em> extraction, or you index empty strings and wonder why retrieval finds nothing.</div>
+  </div>
+</section>
+
+<section id="chunk">
+  <div class="wrap">
+    <span class="sec-no">Stage 2 · indexing</span>
+    <h2>Chunking</h2>
+    <p class="sec-lead">Embedding models and LLMs both have limits, and a whole document is too coarse to retrieve precisely. So you split text into chunks — the unit that gets embedded, stored, retrieved, and handed to the model. Chunking quietly decides retrieval quality more than almost any other knob.</p>
+
+    <div class="shape"><b>one long text</b> <span class="arrow">→</span> split <span class="arrow">→</span> <b>many chunks</b> (each a few hundred words)</div>
+
+    <p>The tension is simple. Chunks too <strong>small</strong> lose context — a sentence about "the 5-day window" with no idea what window. Too <strong>large</strong> and a single chunk covers several topics, so its vector becomes a muddy average and you waste the model's context on irrelevant text. You are tuning for "one chunk = one coherent idea."</p>
+
+    <h4>The main strategies</h4>
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>Strategy</th><th>How it cuts</th><th>Good for</th><th>Cost</th></tr></thead>
+        <tbody>
+          <tr><td><b>Fixed-size</b></td><td>Every N tokens/words, blind to meaning</td><td>Uniform text, FAQs, a fast baseline</td><td>Lowest</td></tr>
+          <tr><td><b>Fixed + overlap</b></td><td>Fixed, but repeat the last 10–20% into the next chunk</td><td>Technical/legal text where ideas cross boundaries</td><td>Low</td></tr>
+          <tr><td><b>Recursive</b></td><td>Split on paragraphs, then sentences, then words, until it fits</td><td>Most prose — the usual go-to default</td><td>Low</td></tr>
+          <tr><td><b>Semantic</b></td><td>Embed sentences, cut where meaning shifts</td><td>Long narratives, research papers</td><td>High (embeds while chunking)</td></tr>
+          <tr><td><b>Structure-aware</b></td><td>Respect headings/sections/tables</td><td>Manuals, structured docs</td><td>Medium</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note"><span class="lbl">What the research actually says</span>Recursive token chunking is the reliable default and often beats fixed-size on precision. But "fancier = better" is not guaranteed: several 2025 studies found a plain fixed size of ~200 words competitive with semantic chunking on real datasets, and semantic chunking sometimes <em>underperformed</em> by introducing noise. Translation: pick recursive with overlap as a baseline, then let your eval harness (Stage 9) tell you the truth for <em>your</em> data. A common starting point: ~512 tokens with 50–100 tokens of overlap, or ~200–500 words with 10–20% overlap.</div>
+
+    <p class="codecap">C# — a transparent word-based chunker with overlap</p>
+<pre><span class="kw">public static</span> IEnumerable&lt;<span class="ty">string</span>&gt; Chunk(<span class="kw">string</span> text, <span class="kw">int</span> size = <span class="st">200</span>, <span class="kw">int</span> overlap = <span class="st">40</span>)
+{
+    <span class="kw">var</span> words = text.Split(<span class="st">' '</span>, StringSplitOptions.RemoveEmptyEntries);
+    <span class="kw">int</span> step = Math.Max(<span class="st">1</span>, size - overlap);
+    <span class="kw">for</span> (<span class="kw">int</span> i = <span class="st">0</span>; i &lt; words.Length; i += step)
+    {
+        <span class="kw">yield return</span> <span class="kw">string</span>.Join(<span class="st">' '</span>, words.Skip(i).Take(size));
+        <span class="kw">if</span> (i + size &gt;= words.Length) <span class="kw">break</span>;
+    }
+}</pre>
+
+    <p>Play with the two knobs below on a sample policy paragraph. Watch how overlap (amber) re-stitches the seam between chunks, and how shrinking the size multiplies the chunk count.</p>
+
+    <div class="lab" id="chunklab">
+      <div class="lab-head"><span class="lab-title">Playground · chunking</span><span class="lab-tag">interactive</span></div>
+      <p class="lab-sub">Amber = text repeated as overlap into the next chunk.</p>
+      <div class="ctrl"><label>chunk size (words)</label><input type="range" id="csize" min="8" max="60" value="22" step="1"><span class="val" id="csizeV">22</span></div>
+      <div class="ctrl"><label>overlap (words)</label><input type="range" id="cover" min="0" max="20" value="5" step="1"><span class="val" id="coverV">5</span></div>
+      <div class="metric-grid">
+        <div class="metric"><div class="k">chunks created</div><div class="v" id="cCount">—</div><div class="h">more = finer, costlier</div></div>
+        <div class="metric"><div class="k">avg words/chunk</div><div class="v" id="cAvg">—</div><div class="h">context per chunk</div></div>
+        <div class="metric"><div class="k">overlap ratio</div><div class="v" id="cRatio">—</div><div class="h">continuity vs waste</div></div>
+      </div>
+      <div class="chunk-list" id="chunkOut"></div>
+    </div>
+
+    <h4>Tools &amp; open-source alternatives</h4>
+    <ul class="clean">
+      <li><strong>Open source:</strong> <span class="pill">LangChain RecursiveCharacterTextSplitter</span><span class="pill">LlamaIndex node parsers</span><span class="pill">semantic-text-splitter</span> — or, as above, just write it yourself in ~10 lines for full control and zero dependencies.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="embed">
+  <div class="wrap">
+    <span class="sec-no">Stage 3 · indexing &amp; querying</span>
+    <h2>Embeddings</h2>
+    <p class="sec-lead">An embedding model turns a piece of text into a list of numbers — a vector — positioned in a high-dimensional space so that texts with similar <em>meaning</em> land near each other. This is the trick that lets a computer search by meaning instead of by exact words.</p>
+
+    <div class="shape"><b>"prior authorization needed?"</b> <span class="arrow">→</span> embed <span class="arrow">→</span> <b>[0.021, -0.118, 0.067, … ]</b> <span style="color:var(--ink-3)">(e.g. 1536 numbers)</span></div>
+
+    <p>So "PA required before dispensing" and "needs prior authorization" end up close together even though they share almost no words, while "delivery takes 2 days" sits far away. Closeness is measured by a <strong>similarity metric</strong> — usually <strong>cosine similarity</strong> (the angle between two vectors; 1.0 = same direction, 0 = unrelated). Dot product and Euclidean distance are the other common choices.</p>
+
+    <div class="note warn"><span class="lbl">The rule you must not break</span>Embed the documents and the user's question with the <em>same</em> model. Vectors from two different models live in incompatible spaces — comparing them is meaningless, and retrieval silently returns garbage. If you change the embedding model, you must re-index everything.</div>
+
+    <p>The demo embeds a query and four chunks into a tiny 5-concept space (real models use hundreds or thousands of dimensions, but the math is identical) and ranks them by cosine similarity. Change the query's emphasis and watch the ranking reshuffle.</p>
+
+    <div class="lab" id="simlab">
+      <div class="lab-head"><span class="lab-title">Playground · meaning as distance</span><span class="lab-tag">interactive</span></div>
+      <p class="lab-sub">Dial how much the question is "about" each concept; the bars show cosine similarity to each stored chunk.</p>
+      <div class="ctrl"><label>about: prior-auth</label><input type="range" id="dPA" min="0" max="10" value="9"><span class="val" id="dPAV">9</span></div>
+      <div class="ctrl"><label>about: delivery</label><input type="range" id="dDEL" min="0" max="10" value="1"><span class="val" id="dDELV">1</span></div>
+      <div class="ctrl"><label>about: cost/copay</label><input type="range" id="dCOST" min="0" max="10" value="2"><span class="val" id="dCOSTV">2</span></div>
+      <div id="simOut" style="margin-top:14px;"></div>
+    </div>
+
+    <h4>Tools &amp; open-source alternatives</h4>
+    <ul class="clean">
+      <li><strong>Used here:</strong> Azure OpenAI <code>text-embedding-3-small</code> / <code>-large</code> (1536 / 3072 dims).</li>
+      <li><strong>Open source:</strong> <span class="pill">BGE-M3</span><span class="pill">E5 (intfloat)</span><span class="pill">Nomic Embed</span><span class="pill">all-MiniLM-L6</span> — BGE-M3 and E5 are strong, self-hostable, multilingual workhorses; all-MiniLM is tiny and fine for local development but degrades on specialized domains, so don't ship it for serious retrieval. Run them via <span class="pill">sentence-transformers</span>.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="index">
+  <div class="wrap">
+    <span class="sec-no">Stage 4 · indexing</span>
+    <h2>The index &amp; the vector database</h2>
+    <p class="sec-lead">You now have a vector per chunk. Storing them is easy; <em>searching</em> millions of them in milliseconds is the hard part. That's what a vector index — and the database around it — is built for.</p>
+
+    <div class="shape"><b>chunks + vectors + metadata</b> <span class="arrow">→</span> upload <span class="arrow">→</span> <b>searchable index</b></div>
+
+    <h4>Why a special index at all?</h4>
+    <p>The honest way to find the nearest vectors is brute force: compare the query to every stored vector. That's <em>exact</em> but slow — fine for thousands of chunks, hopeless for millions. So production systems use <strong>Approximate Nearest Neighbor (ANN)</strong> indexes that trade a sliver of accuracy for enormous speed.</p>
+    <ul class="clean">
+      <li><strong>Flat / brute force</strong> — exact, simple, slow. Great for small corpora.</li>
+      <li><strong>HNSW</strong> (Hierarchical Navigable Small World) — a layered graph you "navigate" toward the closest neighbors. The dominant default: fast, high recall, memory-hungry.</li>
+      <li><strong>IVF / PQ</strong> — partition the space into buckets and/or compress vectors. Scales to billions with less memory, slightly lower recall.</li>
+    </ul>
+
+    <div class="note"><span class="lbl">Metadata earns its keep here</span>Store more than the vector: a stable chunk id, the source document, page, and any access tags. Stable ids make retrieval debuggable and evaluation possible (Stage 9). Access tags enable <strong>permission-aware retrieval</strong> — a user only ever retrieves what they're allowed to see, which is the difference between a toy and something you can put in a regulated workplace.</div>
+
+    <p class="codecap">C# — upload chunks with their vectors (Azure AI Search)</p>
+<pre><span class="kw">await</span> searchClient.UploadDocumentsAsync(<span class="kw">new</span>[]
+{
+    <span class="kw">new</span> <span class="ty">SearchDocument</span>
+    {
+        [<span class="st">"id"</span>]            = <span class="st">"policy-p3-c2"</span>,   <span class="cm">// stable, debuggable</span>
+        [<span class="st">"content"</span>]       = chunkText,
+        [<span class="st">"contentVector"</span>] = vector,            <span class="cm">// the embedding</span>
+        [<span class="st">"source"</span>]        = <span class="st">"Policies.pdf"</span>
+    }
+});</pre>
+
+    <h4>Tools &amp; open-source alternatives</h4>
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>Option</th><th>Shape</th><th>When it fits</th></tr></thead>
+        <tbody>
+          <tr><td class="tool">Azure AI Search</td><td>Managed (used here)</td><td>Azure stack; built-in hybrid + semantic ranker</td></tr>
+          <tr><td class="tool">Qdrant</td><td>OSS, Rust</td><td>Fast, great metadata filtering, real-time updates</td></tr>
+          <tr><td class="tool">Weaviate</td><td>OSS</td><td>Hybrid search + knowledge-graph features</td></tr>
+          <tr><td class="tool">Milvus</td><td>OSS</td><td>Billion-scale, production heavy lifting</td></tr>
+          <tr><td class="tool">pgvector</td><td>Postgres extension</td><td>You already run Postgres; simplest to adopt</td></tr>
+          <tr><td class="tool">Chroma</td><td>OSS, lightweight</td><td>Prototyping and small workloads</td></tr>
+          <tr><td class="tool">FAISS</td><td>Library, not a DB</td><td>Max control over ANN; you build the service around it</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note amber"><span class="lbl">Library vs database</span>FAISS (and hnswlib) are index <em>libraries</em> — they do the math but not persistence, filtering, or APIs. A vector <em>database</em> wraps that with storage, metadata filters, and a network interface. Reach for the library only when you want to own those pieces yourself.</div>
+  </div>
+</section>
+
+<section id="retrieve">
+  <div class="wrap">
+    <span class="sec-no">Stage 5 · querying</span>
+    <h2>Retrieval</h2>
+    <p class="sec-lead">The user has asked something. You embed their question with the same model, then ask the index for the <strong>top-k</strong> nearest chunks. This is the heart of the "R" in RAG, and where most quality problems live.</p>
+
+    <div class="shape"><b>question</b> <span class="arrow">→</span> embed <span class="arrow">→</span> <b>query vector</b> <span class="arrow">→</span> ANN search <span class="arrow">→</span> <b>top-k chunks + scores</b></div>
+
+    <p class="codecap">C# — a vector query for the 3 nearest chunks</p>
+<pre><span class="kw">var</span> qVector = (<span class="kw">await</span> embeddingClient
+    .GenerateEmbeddingAsync(userQuery)).Value.ToFloats().ToArray();
+
+<span class="kw">var</span> options = <span class="kw">new</span> <span class="ty">SearchOptions</span>
+{
+    VectorSearch = { Queries = { <span class="kw">new</span> <span class="ty">VectorizedQuery</span>(qVector)
+    {
+        KNearestNeighborsCount = <span class="st">3</span>,        <span class="cm">// top-k</span>
+        Fields = { <span class="st">"contentVector"</span> }
+    }}}
+};
+<span class="kw">var</span> hits = <span class="kw">await</span> searchClient.SearchAsync&lt;<span class="ty">SearchDocument</span>&gt;(<span class="kw">null</span>, options);</pre>
+
+    <h4>The three levers that decide retrieval quality</h4>
+    <ul class="clean">
+      <li><strong>top-k</strong> — how many chunks to pull. A recall-vs-(precision + cost) dial: bigger k catches more but adds noise and tokens on every query. 3–5 is a common default; prove the right value with evaluation.</li>
+      <li><strong>Hybrid search</strong> — combine dense <em>vector</em> search (meaning) with sparse <em>keyword</em> search (exact terms like a drug name or code, where BM25 shines). Fusing both beats either alone for most real corpora.</li>
+      <li><strong>Reranking</strong> — retrieve a wider net (say 20), then a <strong>cross-encoder</strong> reranker reads each <em>(question, chunk)</em> pair together and rescores them, promoting the truly relevant to the top. Slower per item, far more accurate than the first-pass vector score, so you only run it on the shortlist.</li>
+    </ul>
+
+    <div class="note"><span class="lbl">Bi-encoder vs cross-encoder, in one breath</span>The embedding model is a <em>bi-encoder</em>: it encodes query and chunk separately, so it's fast and cacheable but coarse. A <em>cross-encoder</em> reranker reads both together with full attention — much sharper relevance judgement, much slower. The standard pattern: bi-encoder to retrieve cheaply and widely, cross-encoder to rerank the shortlist precisely.</div>
+
+    <p>Other retrieval boosters you'll meet: <strong>query rewriting / HyDE</strong> (rephrase or hallucinate an ideal answer, then search with that), and <strong>metadata filtering</strong> (restrict the search to a document set or a user's permissions before scoring).</p>
+
+    <h4>Tools &amp; open-source alternatives</h4>
+    <ul class="clean">
+      <li><strong>Hybrid + ranking (used here):</strong> Azure AI Search (BM25 + vector + a semantic ranker).</li>
+      <li><strong>Open-source rerankers:</strong> <span class="pill">bge-reranker-v2</span><span class="pill">Jina reranker</span><span class="pill">cross-encoders (sentence-transformers)</span>; Cohere Rerank is a strong hosted option.</li>
+      <li><strong>Hybrid engines:</strong> <span class="pill">OpenSearch / Elasticsearch kNN</span><span class="pill">Weaviate</span><span class="pill">Vespa</span>.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="augment">
+  <div class="wrap">
+    <span class="sec-no">Stage 6 · querying</span>
+    <h2>Augmentation — building the prompt</h2>
+    <p class="sec-lead">Retrieval gave you the best chunks. Augmentation is the unglamorous-but-decisive step of assembling them into a prompt that forces the model to answer <em>from the context</em>, not from its own memory.</p>
+
+    <div class="shape"><b>top chunks + question</b> <span class="arrow">→</span> template <span class="arrow">→</span> <b>one augmented prompt</b></div>
+
+    <p>A good RAG prompt does three jobs: it presents the retrieved context clearly (often numbered, so the model can cite <code>[1]</code>, <code>[2]</code>), it instructs the model to use <em>only</em> that context and to admit when the answer isn't there, and it then poses the user's question. That "say you don't know" instruction is your first line of defense against hallucination.</p>
+
+    <p class="codecap">C# — assemble grounded context with citation markers</p>
+<pre><span class="kw">string</span> context = <span class="kw">string</span>.Join(<span class="st">"\n\n"</span>,
+    topChunks.Select((c, i) =&gt; $<span class="st">"[{i + 1}] {c.Content}"</span>));
+
+<span class="kw">string</span> prompt = $"""
+    Answer using ONLY the context below. Cite sources as [n].
+    If the answer is not in the context, say you don't know.
+
+    Context:
+    {context}
+
+    Question: {userQuery}
+    """;</pre>
+
+    <div class="note amber"><span class="lbl">"Lost in the middle"</span>Models attend most to the start and end of a long prompt and can overlook material buried in the middle. So order matters: put the strongest chunk first, keep the context tight, and don't drown the signal by stuffing in a huge k. This is <em>why</em> precision (Stage 9) matters, not just recall.</div>
+  </div>
+</section>
+
+<section id="generate">
+  <div class="wrap">
+    <span class="sec-no">Stage 7 · querying</span>
+    <h2>Generation</h2>
+    <p class="sec-lead">Finally, the language model reads the augmented prompt and writes the answer — grounded in the retrieved context, ideally with citations the user can verify.</p>
+
+    <div class="shape"><b>augmented prompt</b> <span class="arrow">→</span> LLM <span class="arrow">→</span> <b>grounded answer + citations</b></div>
+
+    <p class="codecap">C# — call the chat model</p>
+<pre><span class="kw">var</span> chat = client.GetChatClient(<span class="st">"gpt-4.1-mini"</span>);
+<span class="kw">var</span> result = <span class="kw">await</span> chat.CompleteChatAsync(
+    <span class="kw">new</span> <span class="ty">SystemChatMessage</span>(systemPrompt),
+    <span class="kw">new</span> <span class="ty">UserChatMessage</span>(prompt));
+<span class="kw">string</span> answer = result.Value.Content[<span class="st">0</span>].Text;</pre>
+
+    <p>Generation choices that matter: a low <strong>temperature</strong> (near 0) keeps answers deterministic and faithful, which is what you want for factual grounding; the <strong>system prompt</strong> sets the persona and hard rules; and a smaller, cheaper model often suffices once retrieval is doing the heavy lifting — the whole point of RAG is that the model doesn't need to <em>know</em> the answer, only to <em>read</em> it well.</p>
+
+    <div class="note"><span class="lbl">RAG's superpower, restated</span>Because the answer comes from retrieved text, you get current, domain-specific, <em>citable</em> responses without retraining the model — and you can point at exactly which chunk each claim came from. That traceability is why regulated industries reach for RAG.</div>
+
+    <h4>Tools &amp; open-source alternatives</h4>
+    <ul class="clean">
+      <li><strong>Used here:</strong> Azure OpenAI <code>gpt-4.1-mini</code>.</li>
+      <li><strong>Open source / self-hosted:</strong> <span class="pill">Llama 3.x</span><span class="pill">Qwen2.5</span><span class="pill">Mistral</span> served via <span class="pill">Ollama</span> (local) or <span class="pill">vLLM</span> (production throughput).</li>
+    </ul>
+  </div>
+</section>
+
+<section id="agents">
+  <div class="wrap">
+    <span class="sec-no">Stage 8 · querying</span>
+    <h2>The agent layer</h2>
+    <p class="sec-lead">Plain RAG retrieves once and answers once. An agentic layer lets the system <em>decide</em> when and what to retrieve, call tools, and chain steps — turning a single lookup into a small workflow.</p>
+
+    <p>In the running pharmacy example, four agents run in sequence, each adding a section and passing its work to the next: an <strong>intake</strong> agent extracts the structured details, a <strong>clinical</strong> agent checks safety (and searches the knowledge base for formulary info), an <strong>operations</strong> agent finds prior-auth and delivery rules (another knowledge-base search), and an <strong>orchestrator</strong> compiles the final report. Retrieval here isn't a single front-door step — it's a <em>tool</em> two of the agents call when they need grounding.</p>
+
+    <div class="shape"><b>request</b> <span class="arrow">→</span> intake <span class="arrow">→</span> clinical <span class="arrow">→</span> operations <span class="arrow">→</span> orchestrator <span class="arrow">→</span> <b>report</b></div>
+
+    <p>This is the leading edge of RAG: <strong>agentic retrieval</strong>, where an LLM plans queries, decides how many searches to run, hits multiple sources, and assembles structured results — instead of one fixed query at the start. More power, more moving parts, and more to evaluate.</p>
+
+    <h4>Tools &amp; open-source alternatives</h4>
+    <ul class="clean">
+      <li><strong>Used here:</strong> Microsoft Agent Framework / Semantic Kernel (sequential workflow).</li>
+      <li><strong>Open source:</strong> <span class="pill">LangGraph</span><span class="pill">LlamaIndex</span><span class="pill">Haystack</span><span class="pill">Semantic Kernel (OSS)</span>.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="eval">
+  <div class="wrap">
+    <span class="sec-no">Stage 9 · the part that separates toys from systems</span>
+    <h2>Evaluation</h2>
+    <p class="sec-lead">Everything above can run end-to-end and still be quietly wrong. Evaluation is how you prove the system works — and, more importantly, how you catch the moment a change breaks it. This is the stage that turns "I tinkered with RAG" into "I built RAG with measurable quality and regression gates."</p>
+
+    <p>Evaluation splits cleanly in two, because RAG has two things that can fail independently: the <strong>retriever</strong> (did it fetch the right chunks?) and the <strong>generator</strong> (did it answer faithfully from them?). You measure them separately so you know which one to fix.</p>
+
+    <h4>Retrieval metrics — graded against a golden set</h4>
+    <p>A "golden set" is a hand-built list of questions, each tagged with which chunk(s) <em>should</em> come back. For each query you run the real search, mark each returned chunk relevant or not, and compute:</p>
+    <ul class="clean">
+      <li><strong>Hit@k / Recall@k</strong> — did any (or all) of the right chunks make the top k? Did we find it at all?</li>
+      <li><strong>MRR</strong> — how high did the <em>first</em> relevant chunk rank? Rewards putting the good stuff at position 1.</li>
+      <li><strong>Precision@k</strong> — of the k chunks returned, what fraction were relevant? Measures noise.</li>
+      <li><strong>NDCG</strong> — rank-quality with graded relevance, discounting hits that appear lower down.</li>
+    </ul>
+
+    <h4>Generation metrics — usually scored by an LLM judge</h4>
+    <ul class="clean">
+      <li><strong>Faithfulness / groundedness</strong> — is every claim supported by the retrieved context, or did the model invent things? (The inverse of hallucination.)</li>
+      <li><strong>Answer relevancy</strong> — does the answer actually address the question?</li>
+      <li><strong>Context precision / recall</strong> — was the retrieved context on-topic, and did it contain everything needed?</li>
+    </ul>
+
+    <div class="note"><span class="lbl">The move that signals seniority</span>Wire thresholds into your test suite so the build <em>fails</em> when a metric drops — a regression gate. Now "should I change chunk size / top-k / the embedding model?" stops being an argument and becomes an experiment: change it, re-run, read the report. A green "evals" badge with a real number ("Hit@3 = 0.91 across 34 graded queries") is worth more than any adjective.</div>
+
+    <p class="codecap">C# — a retrieval metric as a pure, testable function</p>
+<pre><span class="kw">public static double</span> ReciprocalRank(IReadOnlyList&lt;<span class="kw">bool</span>&gt; relevance)
+{
+    <span class="kw">for</span> (<span class="kw">int</span> i = <span class="st">0</span>; i &lt; relevance.Count; i++)
+        <span class="kw">if</span> (relevance[i]) <span class="kw">return</span> <span class="st">1.0</span> / (i + <span class="st">1</span>);  <span class="cm">// rank of first hit</span>
+    <span class="kw">return</span> <span class="st">0.0</span>;                                <span class="cm">// nothing relevant found</span>
+}
+
+<span class="cm">// As an xUnit regression gate:</span>
+[<span class="ty">Fact</span>]
+<span class="kw">public void</span> HitAtThree_AboveThreshold()
+    =&gt; Assert.True(suite.HitAtK(<span class="st">3</span>) &gt;= <span class="st">0.70</span>,
+        $<span class="st">"Hit@3 dropped to {suite.HitAtK(3):P0}"</span>);</pre>
+
+    <p>The demo runs four golden queries through a fixed retriever and computes the aggregate metrics live. Toggle any chunk's true relevance (simulating a retrieval change) and watch the metrics — and the pass/fail gates — react.</p>
+
+    <div class="lab" id="evallab">
+      <div class="lab-head"><span class="lab-title">Playground · the eval harness</span><span class="lab-tag">interactive</span></div>
+      <p class="lab-sub">Each row is a golden query's top-3 result. Click a slot to flip relevant ↔ noise and see the gates respond.</p>
+      <div id="evalRows"></div>
+      <div class="metric-grid" style="margin-top:16px;">
+        <div class="metric"><div class="k">Hit@3</div><div class="v" id="mHit">—</div><div class="h" id="gHit">gate ≥ 70%</div></div>
+        <div class="metric"><div class="k">MRR</div><div class="v" id="mMRR">—</div><div class="h" id="gMRR">gate ≥ 0.50</div></div>
+        <div class="metric"><div class="k">Precision@3</div><div class="v" id="mPrec">—</div><div class="h" id="gPrec">gate ≥ 0.40</div></div>
+        <div class="metric"><div class="k">build</div><div class="v" id="mBuild">—</div><div class="h">all gates must pass</div></div>
+      </div>
+    </div>
+
+    <h4>Tools &amp; open-source alternatives</h4>
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>Tool</th><th>Best at</th></tr></thead>
+        <tbody>
+          <tr><td class="tool">Custom xUnit / pytest harness</td><td>Full control, lives in your repo, doubles as proof you can test in your stack</td></tr>
+          <tr><td class="tool">Ragas</td><td>Rich RAG-specific metrics, reference-free, easy entry point</td></tr>
+          <tr><td class="tool">DeepEval</td><td>Pytest-native; the strongest choice for CI/CD blocking gates</td></tr>
+          <tr><td class="tool">TruLens</td><td>Tracing + dashboards for comparing chunking/embedding experiments</td></tr>
+          <tr><td class="tool">promptfoo</td><td>Test-driven prompt work and security/red-team checks</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note warn"><span class="lbl">Don't trust a single number</span>A system can score high on faithfulness and still give wrong business answers if the underlying documents are stale or incorrect — judges measure outputs, not whether the source was worth trusting. And LLM-judge scores are directional, not ground truth. Treat evaluation as evidence, and keep a human in the loop for the cases that matter.</div>
+  </div>
+</section>
+
+<section id="tools">
+  <div class="wrap">
+    <span class="sec-no">Reference</span>
+    <h2>Every tool, and its open-source twin</h2>
+    <p class="sec-lead">The whole stack on one page — what the running example uses, and what you'd reach for if you wanted to self-host or avoid a vendor.</p>
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>Stage</th><th>Used here</th><th>Open-source alternatives</th></tr></thead>
+        <tbody>
+          <tr><td><b>Extraction</b></td><td class="tool">Azure Content Understanding</td><td>Docling, Unstructured, Apache Tika, PyMuPDF, pdfplumber</td></tr>
+          <tr><td><b>Chunking</b></td><td class="tool">custom / framework splitter</td><td>LangChain RecursiveCharacterTextSplitter, LlamaIndex parsers, semantic-text-splitter</td></tr>
+          <tr><td><b>Embeddings</b></td><td class="tool">Azure OpenAI text-embedding-3</td><td>BGE-M3, E5, Nomic Embed, all-MiniLM (dev), via sentence-transformers</td></tr>
+          <tr><td><b>Vector index / DB</b></td><td class="tool">Azure AI Search</td><td>Qdrant, Weaviate, Milvus, pgvector, Chroma, FAISS (library)</td></tr>
+          <tr><td><b>ANN algorithm</b></td><td class="tool">HNSW (inside Azure AI Search)</td><td>FAISS (HNSW / IVF / PQ), hnswlib</td></tr>
+          <tr><td><b>Hybrid &amp; rerank</b></td><td class="tool">Azure semantic ranker</td><td>OpenSearch kNN, Vespa; bge-reranker-v2, Jina, cross-encoders</td></tr>
+          <tr><td><b>Orchestration / agents</b></td><td class="tool">Microsoft Agent Framework</td><td>LangGraph, LlamaIndex, Haystack, Semantic Kernel (OSS)</td></tr>
+          <tr><td><b>LLM</b></td><td class="tool">Azure OpenAI gpt-4.1-mini</td><td>Llama 3.x, Qwen2.5, Mistral via Ollama / vLLM</td></tr>
+          <tr><td><b>Evaluation</b></td><td class="tool">custom xUnit harness</td><td>Ragas, DeepEval, TruLens, promptfoo</td></tr>
+          <tr><td><b>Observability</b></td><td class="tool">Application Insights</td><td>OpenTelemetry, Langfuse, Phoenix (Arize), Opik</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section id="cheat">
+  <div class="wrap">
+    <span class="sec-no">Never think about it again</span>
+    <h2>The one-screen cheat sheet</h2>
+    <p class="sec-lead">If you remember nothing else, remember this.</p>
+    <ul class="clean">
+      <li><strong>RAG = two pipelines.</strong> Index documents offline; answer questions online. Same embedding model on both sides, always.</li>
+      <li><strong>Chunk</strong> so one chunk = one idea. Recursive + overlap is the safe default; let evaluation pick the size.</li>
+      <li><strong>Embeddings</strong> turn meaning into position. Cosine similarity = "how close in meaning."</li>
+      <li><strong>The index</strong> (HNSW &amp; friends) makes searching millions of vectors fast by being approximately, not exactly, right.</li>
+      <li><strong>Retrieval</strong> = embed the question, pull top-k. Add hybrid search for exact terms and a cross-encoder reranker for precision.</li>
+      <li><strong>Augment</strong> by pasting the best chunks into a prompt that says "use only this, cite it, admit when you don't know."</li>
+      <li><strong>Generate</strong> at low temperature; the model reads the answer rather than recalling it.</li>
+      <li><strong>Agents</strong> turn one retrieval into a planned workflow with retrieval-as-a-tool.</li>
+      <li><strong>Evaluate</strong> retriever and generator separately, against a golden set, with thresholds that fail the build. This is the difference between a demo and a system.</li>
+    </ul>
+    <div class="note"><span class="lbl">Prove you own it</span>For any stage, ask yourself: can I explain it, change it, and debug it without help? The fastest way to find the gap is to break something on purpose — change top-k or a threshold, predict what each metric will do, then run it. When your prediction matches reality, it's yours.</div>
+  </div>
+</section>
+
+<footer>
+  <div class="bleed"><div>
+    <p style="font-family:var(--display); font-size:20px; color:var(--ink); margin-bottom:8px;">That's the whole machine.</p>
+    <p>You now have the shape of every stage, the data that flows between them, working C#, the open-source map, and five playgrounds to pressure-test your intuition. Build one end to end, measure it, and the mystery is gone for good.</p>
+    <p class="src" style="margin-top:24px; color:var(--ink-3);"><strong>Grounded in current sources (2025–2026), paraphrased:</strong><br>
+      Microsoft Cloud Blog &amp; Microsoft Learn (RAG techniques, Azure AI Search) ·
+      Pinecone, Weaviate &amp; Databricks (pipeline &amp; chunking guides) ·
+      arXiv surveys on RAG architecture, chunking trade-offs, and RAGOps ·
+      vector-DB comparisons (Milvus, Qdrant, Weaviate, pgvector, Chroma, FAISS) ·
+      Hugging Face (BGE-M3, BGE-reranker) ·
+      Confident AI / Anyscale / Patronus (Ragas, DeepEval, TruLens metrics).</p>
+  </div></div>
+</footer>
+
+<script>
+/* ---------- reveal + scroll-in ---------- */
+window.addEventListener('load', function(){
+  document.querySelectorAll('header.hero .reveal').forEach(function(el,i){
+    setTimeout(function(){ el.classList.add('in'); }, 120 + i*140);
+  });
+  var io = new IntersectionObserver(function(es){
+    es.forEach(function(e){ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target);} });
+  }, {threshold:0.12});
+  document.querySelectorAll('section h2, section .sec-lead').forEach(function(el){
+    el.classList.add('reveal'); io.observe(el);
+  });
+});
+
+/* ---------- 1. flow stepper ---------- */
+(function(){
+  var stages = [
+    {ph:'A', lbl:'Documents', t:'Raw documents', b:'Source files, before anything touches them. This is the offline pipeline — no user involved yet.',
+     d:'<span class="dim">// inputs</span>\nPolicies.pdf   <span class="dim">(binary PDF)</span>\nFormulary.pdf  <span class="dim">(binary PDF)</span>'},
+    {ph:'A', lbl:'Extract', t:'Extraction → text', b:'Pull clean, readable text out of the messy file container.',
+     d:'<span class="hi">"Specialty medications require prior\n authorization before dispensing. PA must\n be obtained within 5 business days..."</span>\n<span class="dim">// now plain markdown, not a PDF</span>'},
+    {ph:'A', lbl:'Chunk', t:'Chunking', b:'Split the text into coherent, retrievable pieces.',
+     d:'chunk[0] = <span class="hi">"Specialty medications require prior\n authorization before dispensing."</span>\nchunk[1] = <span class="hi">"PA must be obtained within 5\n business days of receipt."</span>\n<span class="dim">// ...34 chunks total</span>'},
+    {ph:'A', lbl:'Embed', t:'Embedding the chunks', b:'Each chunk becomes a vector that captures its meaning.',
+     d:'chunk[0] → <span class="hi2">[0.021, -0.118, 0.067, 0.004, ...]</span>\nchunk[1] → <span class="hi2">[0.015, -0.092, 0.071, 0.030, ...]</span>\n<span class="dim">// 1536 numbers each (text-embedding-3-small)</span>'},
+    {ph:'A', lbl:'Index', t:'Stored in the index', b:'Vectors + ids + metadata land in a searchable ANN index. Offline pipeline done.',
+     d:'<span class="hi">policy-p1-c0</span>  vec  source=Policies.pdf\n<span class="hi">policy-p1-c1</span>  vec  source=Policies.pdf\n<span class="dim">// HNSW index, ready for fast search</span>'},
+    {ph:'B', lbl:'Question', t:'A user asks', b:'The online pipeline begins. A real question arrives.',
+     d:'<span class="hi">"Does Humira need prior authorization?"</span>'},
+    {ph:'B', lbl:'Embed query', t:'Embed the question', b:'Same model as the chunks — this is non-negotiable.',
+     d:'query → <span class="hi2">[0.019, -0.110, 0.064, 0.009, ...]</span>\n<span class="dim">// lives in the same space as the chunks</span>'},
+    {ph:'B', lbl:'Search', t:'ANN search', b:'Find the stored vectors nearest to the query vector.',
+     d:'<span class="dim">// navigating the HNSW graph...</span>\ncomparing query vector to neighbors\nby cosine similarity'},
+    {ph:'B', lbl:'Top-k', t:'Top-k chunks + scores', b:'The k nearest chunks come back, each with a similarity score.',
+     d:'1. <span class="hi">"PA must be obtained within 5..."</span>  0.74\n2. <span class="hi">"Specialty meds require prior..."</span> 0.71\n3. <span class="hi">"Copay assistance reduces..."</span>    0.55 <span class="dim">(noise)</span>'},
+    {ph:'B', lbl:'Rerank', t:'Rerank the shortlist', b:'A cross-encoder rereads each (question, chunk) pair and reorders by true relevance.',
+     d:'1. <span class="hi">"Specialty meds require prior auth..."</span> 0.93\n2. <span class="hi">"PA must be obtained within 5..."</span>     0.88\n3. <span class="dim">"Copay assistance..."  0.12  → dropped</span>'},
+    {ph:'B', lbl:'Augment', t:'Build the prompt', b:'Best chunks become numbered context with strict instructions.',
+     d:'Answer using ONLY the context. Cite as [n].\n<span class="dim">Context:</span>\n[1] Specialty meds require prior auth...\n[2] PA must be obtained within 5 days...\n<span class="dim">Question:</span> Does Humira need prior authorization?'},
+    {ph:'B', lbl:'Generate', t:'The model writes', b:'The LLM reads the prompt and answers from the context, at low temperature.',
+     d:'<span class="dim">// gpt-4.1-mini, temperature ~0</span>\ngenerating grounded answer...'},
+    {ph:'B', lbl:'Answer', t:'Grounded answer', b:'A citable response the user can verify against the source.',
+     d:'<span class="hi">"Yes. Humira is a specialty medication and\n requires prior authorization before it can\n be dispensed [1], which must be obtained\n within 5 business days of receipt [2]."</span>'}
+  ];
+  var cur=0, timer=null;
+  var A=document.getElementById('flowA'), B=document.getElementById('flowB'), insp=document.getElementById('flowInsp');
+  stages.forEach(function(s,i){
+    var c=document.createElement('span'); c.className='stage-chip'; c.textContent=(i+1)+'. '+s.lbl;
+    c.addEventListener('click',function(){ stop(); cur=i; render(); });
+    (s.ph==='A'?A:B).appendChild(c);
+  });
+  var chips=document.querySelectorAll('#flowlab .stage-chip');
+  function render(){
+    chips.forEach(function(c,i){ c.classList.toggle('on',i===cur); c.classList.toggle('done',i<cur); });
+    var s=stages[cur];
+    insp.innerHTML='<div class="insp-title">'+s.t+'</div><div class="insp-blurb">'+s.b+'</div><div class="insp-data">'+s.d+'</div>';
+    document.getElementById('flowPrev').disabled=(cur===0);
+    document.getElementById('flowNext').disabled=(cur===stages.length-1);
+  }
+  function stop(){ if(timer){clearInterval(timer); timer=null; document.getElementById('flowPlay').textContent='▶ Play';} }
+  document.getElementById('flowNext').onclick=function(){ stop(); if(cur<stages.length-1){cur++; render();} };
+  document.getElementById('flowPrev').onclick=function(){ stop(); if(cur>0){cur--; render();} };
+  document.getElementById('flowReset').onclick=function(){ stop(); cur=0; render(); };
+  document.getElementById('flowPlay').onclick=function(){
+    if(timer){ stop(); return; }
+    this.textContent='❚❚ Pause';
+    timer=setInterval(function(){ if(cur<stages.length-1){cur++; render();} else { stop(); } }, 1400);
+  };
+  render();
+})();
+
+/* ---------- 2. chunking playground ---------- */
+(function(){
+  var text="Specialty medications require prior authorization before dispensing. Prior authorization must be obtained within five business days of receiving the prescription. Once approved, the medication is shipped to the patient within two to three business days. Copay assistance programs may reduce the patient's out-of-pocket cost when eligibility criteria are met.";
+  var words=text.split(/\s+/);
+  var sizeEl=document.getElementById('csize'), overEl=document.getElementById('cover'), out=document.getElementById('chunkOut');
+  function esc(w){ return w.replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
+  function build(){
+    var size=+sizeEl.value, overlap=Math.min(+overEl.value,size-1);
+    document.getElementById('csizeV').textContent=size;
+    document.getElementById('coverV').textContent=overlap;
+    overEl.max=Math.max(0,size-1);
+    var step=Math.max(1,size-overlap), chunks=[], i=0;
+    while(i<words.length){ chunks.push({start:i, words:words.slice(i,i+size)}); if(i+size>=words.length) break; i+=step; }
+    out.innerHTML='';
+    chunks.forEach(function(c,idx){
+      var html='';
+      c.words.forEach(function(w,j){
+        var isOv = idx>0 && j<overlap;
+        html += (isOv?'<span class="ov">'+esc(w)+'</span>':esc(w))+' ';
+      });
+      var div=document.createElement('div'); div.className='cw';
+      div.innerHTML='<span class="cw-h">chunk '+idx+' · '+c.words.length+' words</span>'+html;
+      out.appendChild(div);
+    });
+    var total=chunks.reduce(function(a,c){return a+c.words.length;},0);
+    document.getElementById('cCount').textContent=chunks.length;
+    document.getElementById('cAvg').textContent=Math.round(total/chunks.length);
+    document.getElementById('cRatio').textContent=Math.round(overlap/size*100)+'%';
+  }
+  sizeEl.oninput=build; overEl.oninput=build; build();
+})();
+
+/* ---------- 3. similarity demo ---------- */
+(function(){
+  var chunks=[
+    {t:'"PA must be approved before dispensing"', v:[0.95,0.05,0.10,0.20,0.00]},
+    {t:'"PA submissions need diagnosis code + notes"', v:[0.85,0.05,0.15,0.45,0.00]},
+    {t:'"Copay assistance reduces out-of-pocket cost"', v:[0.10,0.05,0.95,0.10,0.00]},
+    {t:'"Delivery takes 2 to 3 business days"', v:[0.05,0.95,0.05,0.00,0.25]}
+  ];
+  function cos(a,b){ var d=0,na=0,nb=0; for(var i=0;i<a.length;i++){d+=a[i]*b[i]; na+=a[i]*a[i]; nb+=b[i]*b[i];} return (na&&nb)? d/(Math.sqrt(na)*Math.sqrt(nb)) : 0; }
+  var pa=document.getElementById('dPA'), del=document.getElementById('dDEL'), co=document.getElementById('dCOST'), out=document.getElementById('simOut');
+  function build(){
+    document.getElementById('dPAV').textContent=pa.value;
+    document.getElementById('dDELV').textContent=del.value;
+    document.getElementById('dCOSTV').textContent=co.value;
+    var q=[+pa.value,+del.value,+co.value,0,0];
+    var rows=chunks.map(function(c){ return {t:c.t, s:cos(q,c.v)}; }).sort(function(a,b){return b.s-a.s;});
+    var max=rows[0].s||1;
+    out.innerHTML=rows.map(function(r,i){
+      var pct=Math.round(r.s/max*100);
+      return '<div class="simrow"><div class="bar '+(i===0?'win':'lo')+'"><div class="fill" style="width:'+pct+'%"></div></div><div class="sc">'+r.s.toFixed(3)+'</div></div>'+
+             '<div class="txt" style="color:var(--ink-2); margin:-2px 0 8px">'+r.t+(i===0?'  ← best match':'')+'</div>';
+    }).join('');
+  }
+  pa.oninput=build; del.oninput=build; co.oninput=build; build();
+})();
+
+/* ---------- 4. eval harness demo ---------- */
+(function(){
+  var golden=[
+    {q:'q1 · prior authorization requirements', rel:[false,true,false]},
+    {q:'q2 · delivery timeline for specialty meds', rel:[true,false,false]},
+    {q:'q3 · copay / financial assistance', rel:[false,false,true]},
+    {q:'q4 · documents needed for PA submission', rel:[false,true,false]}
+  ];
+  var rowsEl=document.getElementById('evalRows');
+  function slot(qi,si){
+    var on=golden[qi].rel[si];
+    return '<span class="evslot" data-q="'+qi+'" data-s="'+si+'" style="display:inline-block; font-family:var(--mono); font-size:11px; padding:4px 9px; margin:2px 4px 2px 0; border-radius:6px; cursor:pointer; border:0.5px solid var(--rule); background:'+(on?'#E0F2EB':'#F1EADB')+'; color:'+(on?'#0A4D3D':'#827E72')+'">#'+(si+1)+' '+(on?'relevant':'noise')+'</span>';
+  }
+  function renderRows(){
+    rowsEl.innerHTML=golden.map(function(g,qi){
+      return '<div style="margin:8px 0; padding:8px 0; border-bottom:0.5px solid var(--rule)"><div style="font-family:var(--mono); font-size:12.5px; color:var(--ink-2); margin-bottom:4px">'+g.q+'</div>'+
+        slot(qi,0)+slot(qi,1)+slot(qi,2)+'</div>';
+    }).join('');
+    rowsEl.querySelectorAll('.evslot').forEach(function(el){
+      el.onclick=function(){ var qi=+el.dataset.q, si=+el.dataset.s; golden[qi].rel[si]=!golden[qi].rel[si]; renderRows(); compute(); };
+    });
+  }
+  function compute(){
+    var n=golden.length, hit=0, mrr=0, prec=0;
+    golden.forEach(function(g){
+      var relCount=g.rel.filter(Boolean).length;
+      if(relCount>0) hit++;
+      var fr=g.rel.indexOf(true); mrr += fr>=0 ? 1/(fr+1) : 0;
+      prec += relCount/3;
+    });
+    hit/=n; mrr/=n; prec/=n;
+    set('mHit',Math.round(hit*100)+'%', hit>=0.70,'gHit','gate ≥ 70%');
+    set('mMRR',mrr.toFixed(2), mrr>=0.50,'gMRR','gate ≥ 0.50');
+    set('mPrec',prec.toFixed(2), prec>=0.40,'gPrec','gate ≥ 0.40');
+    var pass = hit>=0.70 && mrr>=0.50 && prec>=0.40;
+    var b=document.getElementById('mBuild'); b.textContent=pass?'PASS':'FAIL';
+    b.style.color=pass?'var(--teal)':'var(--coral)';
+  }
+  function set(id,val,ok,gid,base){
+    document.getElementById(id).textContent=val;
+    var g=document.getElementById(gid); g.textContent=base+(ok?' ✓':' ✗'); g.style.color=ok?'var(--teal)':'var(--coral)';
+  }
+  renderRows(); compute();
+})();
+</script>
+
+</body>
+</html>
